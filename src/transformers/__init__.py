@@ -541,6 +541,7 @@ if is_torch_available():
             "BART_PRETRAINED_MODEL_ARCHIVE_LIST",
             "BartForCausalLM",
             "BartForConditionalGeneration",
+            "BartExtendedForConditionalGeneration",
             "BartForQuestionAnswering",
             "BartForSequenceClassification",
             "BartModel",

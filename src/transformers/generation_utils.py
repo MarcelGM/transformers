@@ -22,6 +22,7 @@ import torch
 import torch.distributed as dist
 from torch.nn import functional as F
 
+import transformers
 from .file_utils import ModelOutput
 from .generation_beam_search import BeamScorer, BeamSearchScorer
 from .generation_logits_process import (
@@ -409,12 +410,20 @@ class GenerationMixin:
         if "encoder_outputs" not in model_kwargs:
             # retrieve encoder hidden states
             encoder = self.get_encoder()
+            if not isinstance(encoder, transformers.models.bart.modeling_bart.BartEncoder) and len(encoder) == 2:
+                (encoder_source, encoder_knowledge) = encoder
             encoder_kwargs = {
                 argument: value
                 for argument, value in model_kwargs.items()
                 if not (argument.startswith("decoder_") or argument.startswith("cross_attn"))
             }
-            model_kwargs["encoder_outputs"]: ModelOutput = encoder(input_ids, return_dict=True, **encoder_kwargs)
+            # Encoder
+            if not isinstance(encoder, transformers.models.bart.modeling_bart.BartEncoder) and len(encoder) == 2:
+                model_kwargs["encoder_outputs"]: (ModelOutput, ModelOutput) = \
+                    (encoder_source(input_ids, return_dict=True, **encoder_kwargs),
+                     encoder_knowledge(input_ids, return_dict=True, **encoder_kwargs))
+            else:
+                model_kwargs["encoder_outputs"]: ModelOutput = encoder(input_ids, return_dict=True, **encoder_kwargs)
         return model_kwargs
 
     def _prepare_decoder_input_ids_for_generation(
@@ -481,9 +490,15 @@ class GenerationMixin:
 
         if is_encoder_decoder:
             assert encoder_outputs is not None
-            encoder_outputs["last_hidden_state"] = encoder_outputs.last_hidden_state.index_select(
-                0, expanded_return_idx.to(encoder_outputs.last_hidden_state.device)
-            )
+            if len(encoder_outputs) == 2:
+                for encoder_x in encoder_outputs:
+                    encoder_x["last_hidden_state"] = encoder_x.last_hidden_state.index_select(
+                        0, expanded_return_idx.to(encoder_x.last_hidden_state.device)
+                    )
+            else:
+                encoder_outputs["last_hidden_state"] = encoder_outputs.last_hidden_state.index_select(
+                    0, expanded_return_idx.to(encoder_outputs.last_hidden_state.device)
+                )
             model_kwargs["encoder_outputs"] = encoder_outputs
         return input_ids, model_kwargs
 
@@ -918,6 +933,7 @@ class GenerationMixin:
         encoder_input_ids = input_ids if self.config.is_encoder_decoder else None
 
         if self.config.is_encoder_decoder:
+            # TODO: Why adding encoder_outputs to model_kwargs?
             # add encoder_outputs to model_kwargs
             model_kwargs = self._prepare_encoder_decoder_kwargs_for_generation(input_ids, model_kwargs)
 
@@ -929,7 +945,7 @@ class GenerationMixin:
                     input_ids, decoder_start_token_id=decoder_start_token_id, bos_token_id=bos_token_id
                 )
 
-            if "encoder_outputs" not in model_kwargs or not isinstance(model_kwargs["encoder_outputs"], ModelOutput):
+            if "encoder_outputs" not in model_kwargs: #or not isinstance(model_kwargs["encoder_outputs"][0], ModelOutput) or not isinstance(model_kwargs["encoder_outputs"][1], ModelOutput):
                 raise ValueError("Make sure that `model_kwargs` include `encoder_outputs` of type `ModelOutput`.")
 
         if input_ids.shape[-1] >= max_length:
