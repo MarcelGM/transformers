@@ -794,6 +794,7 @@ class BartEncoder(BartPretrainedModel):
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids) * self.embed_scale
 
+        # TODO: UNderstand what is happening with input_shape
         embed_pos = self.embed_positions(input_shape)
 
         hidden_states = inputs_embeds + embed_pos
@@ -1181,7 +1182,7 @@ class BartExtendedModel(BartPretrainedModel):
             extended_decoder.layernorm_embedding.load_state_dict(pretrained_decoder.layernorm_embedding.state_dict())
 
         # Pretrained model
-        bart_model = BartForConditionalGeneration.from_pretrained('facebook/bart-large-cnn')
+        bart_model = BartForConditionalGeneration.from_pretrained(config.name_or_path) #'facebook/bart-large-cnn')
 
         padding_idx, vocab_size = config.pad_token_id, config.vocab_size
         self.shared = nn.Embedding(vocab_size, config.d_model, padding_idx)
@@ -1231,7 +1232,9 @@ class BartExtendedModel(BartPretrainedModel):
     def forward(
         self,
         input_ids=None,
+        knw_ids=None,
         attention_mask=None,
+        attention_mask_knw=None,
         decoder_input_ids=None,
         decoder_attention_mask=None,
         head_mask=None,
@@ -1276,8 +1279,8 @@ class BartExtendedModel(BartPretrainedModel):
             )
             encoder_knowledge_outputs = self.encoder_knowledge(
                 # TODO: input_ids to be changed for knowledge_ids
-                input_ids=input_ids,
-                attention_mask=attention_mask,
+                input_ids=knw_ids,
+                attention_mask=attention_mask_knw,
                 head_mask=head_mask,
                 inputs_embeds=inputs_embeds,
                 output_attentions=output_attentions,
@@ -1344,7 +1347,7 @@ class BartExtendedModel(BartPretrainedModel):
             encoder_source_hidden_states=encoder_outputs[0][0],
             encoder_source_attention_mask=attention_mask,
             encoder_knowledge_hidden_states=encoder_outputs[1][0],
-            encoder_knowledge_attention_mask=attention_mask,
+            encoder_knowledge_attention_mask=attention_mask_knw,
             head_mask=decoder_head_mask,
             cross_attn_head_mask=cross_attn_head_mask,
             past_key_values=past_key_values,
@@ -1428,7 +1431,9 @@ class BartExtendedForConditionalGeneration(BartPretrainedModel):
     def forward(
         self,
         input_ids=None,
+        knw_ids=None,
         attention_mask=None,
+        attention_mask_knw=None,
         decoder_input_ids=None,
         decoder_attention_mask=None,
         head_mask=None,
@@ -1466,7 +1471,9 @@ class BartExtendedForConditionalGeneration(BartPretrainedModel):
         #print(input_ids, input_ids is None)
         outputs = self.model(
             input_ids,
+            knw_ids,
             attention_mask=attention_mask,
+            attention_mask_knw=attention_mask_knw,
             decoder_input_ids=decoder_input_ids,
             # To be commented
             encoder_outputs=encoder_outputs,

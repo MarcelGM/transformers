@@ -410,6 +410,7 @@ def insert_head_doc(docstring, head_doc=""):
     )
 
 
+# TODO: Understand
 def auto_class_factory(name, model_mapping, checkpoint_for_example="bert-base-cased", head_doc=""):
     # Create a new class with the right name from the base class
     new_class = types.new_class(name, (_BaseAutoModelClass,))

@@ -90,6 +90,8 @@ class BartConfig(PretrainedConfig):
         forced_eos_token_id (:obj:`int`, `optional`, defaults to 2):
             The id of the token to force as the last generated token when :obj:`max_length` is reached. Usually set to
             :obj:`eos_token_id`.
+        extended (:obj:`bool`, `optional`, defaults to :obj:`False`):
+            Whether to use BartModel or BartExtendedModel.
 
     Example::
 
@@ -134,6 +136,7 @@ class BartConfig(PretrainedConfig):
         bos_token_id=0,
         eos_token_id=2,
         is_encoder_decoder=True,
+        is_extended=False,
         decoder_start_token_id=2,
         forced_eos_token_id=2,
         **kwargs
@@ -170,6 +173,7 @@ class BartConfig(PretrainedConfig):
         self.num_hidden_layers = encoder_layers
         self.gradient_checkpointing = gradient_checkpointing
         self.scale_embedding = scale_embedding  # scale factor will be sqrt(d_model) if True
+        self.is_extended = is_extended
 
         # ensure backward compatibility for BART CNN models
         if self.forced_bos_token_id is None and kwargs.get("force_bos_token_to_be_generated", False):

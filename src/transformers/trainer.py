@@ -1699,6 +1699,8 @@ class Trainer:
         Prepare :obj:`inputs` before feeding them to the model, converting them to tensors if they are not already and
         handling potential state.
         """
+        # TODO: Maybe editing inputs here
+
         for k, v in inputs.items():
             if isinstance(v, torch.Tensor):
                 kwargs = dict(device=self.args.device)
@@ -1733,7 +1735,10 @@ class Trainer:
         Return:
             :obj:`torch.Tensor`: The tensor with training loss on this batch.
         """
+        # Which model is it?
         model.train()
+
+        #TODO: prepare inputs properly
         inputs = self._prepare_inputs(inputs)
 
         if is_sagemaker_mp_enabled():
@@ -1777,6 +1782,14 @@ class Trainer:
             labels = inputs.pop("labels")
         else:
             labels = None
+
+        # TODO: Check what is inputs
+        MAX_SOURCE_LENGTH = 1024
+        inputs["knw_ids"] = inputs["input_ids"][:,MAX_SOURCE_LENGTH:]
+        inputs["input_ids"] = inputs["input_ids"][:,:MAX_SOURCE_LENGTH]
+        inputs["attention_mask_knw"] = inputs["attention_mask"][:,MAX_SOURCE_LENGTH:]
+        inputs["attention_mask"] = inputs["attention_mask"][:,:MAX_SOURCE_LENGTH]
+
         outputs = model(**inputs)
         # Save past state if it exists
         # TODO: this needs to be fixed and made cleaner later.

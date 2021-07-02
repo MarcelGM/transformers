@@ -40,6 +40,11 @@ if is_torch_available():
         "PretrainedBartModel",
     ]
 
+    _import_structure["modeling_bart_edited"] = [
+        "BartExtendedForConditionalGeneration",
+        "BartExtendedModel",
+    ]
+
 if is_tf_available():
     _import_structure["modeling_tf_bart"] = ["TFBartForConditionalGeneration", "TFBartModel", "TFBartPretrainedModel"]
 
@@ -61,6 +66,10 @@ if TYPE_CHECKING:
             BartModel,
             BartPretrainedModel,
             PretrainedBartModel,
+        )
+        from .modeling_bart_edited import (
+            BartExtendedForConditionalGeneration,
+            BartExtendedModel,
         )
 
     if is_tf_available():

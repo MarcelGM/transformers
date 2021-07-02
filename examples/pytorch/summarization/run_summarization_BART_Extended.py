@@ -34,6 +34,8 @@ from transformers import (
     AutoConfig,
     AutoModelForSeq2SeqLM,
     AutoTokenizer,
+    BartExtendedForConditionalGeneration,
+    BartForConditionalGeneration,
     DataCollatorForSeq2Seq,
     HfArgumentParser,
     Seq2SeqTrainer,
@@ -235,6 +237,7 @@ summarization_name_mapping = {
     "xglue": ("news_body", "news_title"),
     "xsum": ("document", "summary"),
     "wiki_summary": ("article", "highlights"),
+    "cnn_dm_knowledge": ("article", "triples", "summary"),
 }
 
 
@@ -284,6 +287,7 @@ def main():
         datefmt="%m/%d/%Y %H:%M:%S",
         handlers=[logging.StreamHandler(sys.stdout)],
     )
+    #training_args.should_log = False
     logger.setLevel(logging.INFO if training_args.should_log else logging.WARN)
 
     # Log on each process the small summary:
@@ -344,22 +348,30 @@ def main():
         revision=model_args.model_revision,
         use_auth_token=True if model_args.use_auth_token else None,
     )
-    # model = AutoModelForSeq2SeqLM.from_pretrained(
-    #     model_args.model_name_or_path,
-    #     from_tf=bool(".ckpt" in model_args.model_name_or_path),
-    #     config=config,
-    #     cache_dir=model_args.cache_dir,
-    #     revision=model_args.model_revision,
-    #     use_auth_token=True if model_args.use_auth_token else None,
-    # )
+    model = AutoModelForSeq2SeqLM.from_pretrained(
+        model_args.model_name_or_path,
+        from_tf=bool(".ckpt" in model_args.model_name_or_path),
+        config=config,
+        cache_dir=model_args.cache_dir,
+        revision=model_args.model_revision,
+        use_auth_token=True if model_args.use_auth_token else None,
+    )
 
-    pretrained_bart = BartForConditionalGeneration.from_pretrained('facebook/bart-large-cnn')
-    model = BartExtended.BartExtendedForConditionalGeneration(pretrained_bart.config)
+    pretrained_bart = BartForConditionalGeneration.from_pretrained(model_args.model_name_or_path) # bart-base or bart-large-cnn
+
+    # set use_cache to False
+    pretrained_bart.config.use_cache = False
+
+    from copy import deepcopy
+    extended_config = deepcopy(pretrained_bart.config)
+    extended_config.is_extended = True
+    model = BartExtendedForConditionalGeneration(extended_config) #pretrained_bart.config
+    del pretrained_bart
 
     special_tokens = ['<info>', '<triple>']
 
     print(f"len(tokenizer) = {len(tokenizer)}")
-    tokenizer.add_tokens(special_tokens)
+    tokenizer.add_tokens(special_tokens, special_tokens=True)
 
     model.resize_token_embeddings(len(tokenizer))
 
@@ -380,6 +392,7 @@ def main():
         logger.info("There is nothing to do. Please pass `do_train`, `do_eval` and/or `do_predict`.")
         return
 
+    # TODO: Get input data
     # Get the column names for input/target.
     dataset_columns = summarization_name_mapping.get(data_args.dataset_name, None)
     if data_args.text_column is None:
@@ -403,17 +416,35 @@ def main():
     max_target_length = data_args.max_target_length
     padding = "max_length" if data_args.pad_to_max_length else False
 
+    # TODO: Choose columns
+    # And padding True
+    text_column = 'text_alone'
+    knw_column = 'knowledge'
+    summary_column = 'summary'
+
+    padding = 'max_length'
+
     if training_args.label_smoothing_factor > 0 and not hasattr(model, "prepare_decoder_input_ids_from_labels"):
         logger.warning(
             "label_smoothing is enabled but the `prepare_decoder_input_ids_from_labels` method is not defined for"
             f"`{model.__class__.__name__}`. This will lead to loss being calculated twice and will take up more memory"
         )
 
+    # TODO: Add knw_inputs here
     def preprocess_function(examples):
         inputs = examples[text_column]
+        knowledge_inputs = examples[knw_column]
         targets = examples[summary_column]
         inputs = [prefix + inp for inp in inputs]
         model_inputs = tokenizer(inputs, max_length=data_args.max_source_length, padding=padding, truncation=True)
+
+
+        IS_EXTENDED = True
+        if IS_EXTENDED:
+            model_knowledge_inputs = tokenizer(knowledge_inputs, max_length=max_target_length, padding=padding, truncation=True)
+
+            for field in ['input_ids', 'attention_mask']:
+                model_inputs[field] = [art + knw for art, knw in zip(model_inputs[field], model_knowledge_inputs[field])]
 
         # Setup the tokenizer for targets
         with tokenizer.as_target_tokenizer():
@@ -425,9 +456,13 @@ def main():
             labels["input_ids"] = [
                 [(l if l != tokenizer.pad_token_id else -100) for l in label] for label in labels["input_ids"]
             ]
-
         model_inputs["labels"] = labels["input_ids"]
-        return model_inputs
+
+        # model_inputs["knw_ids"] = model_knowledge_inputs['input_ids']
+        # model_inputs["attention_mask_knw"] = model_knowledge_inputs["attention_mask"]
+
+       #model_knowledge_inputs["labels"] = labels["input_ids"]
+        return model_inputs#, model_knowledge_inputs
 
     if training_args.do_train:
         if "train" not in datasets:

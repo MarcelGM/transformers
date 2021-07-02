@@ -164,11 +164,30 @@ class Seq2SeqTrainer(Trainer):
             "synced_gpus": True if is_deepspeed_zero3_enabled() else False,
         }
 
-        generated_tokens = self.model.generate(
-            inputs["input_ids"],
-            attention_mask=inputs["attention_mask"],
-            **gen_kwargs,
-        )
+
+        # TODO: Add knw_ids
+        # TODO: Why it is not getting to this part of the code???
+        if self.model.config.is_extended:
+            MAX_SOURCE_LENGTH = 1024
+            # max_length???
+            inputs["knw_ids"] = inputs["input_ids"][:,MAX_SOURCE_LENGTH:]
+            inputs["input_ids"] = inputs["input_ids"][:,:MAX_SOURCE_LENGTH]
+            inputs["attention_mask_knw"] = inputs["attention_mask"][:,MAX_SOURCE_LENGTH:]
+            inputs["attention_mask"] = inputs["attention_mask"][:,:MAX_SOURCE_LENGTH]
+
+            generated_tokens = self.model.generate(
+                inputs["input_ids"],
+                inputs["knw_ids"],
+                attention_mask=inputs["attention_mask"],
+                attention_mask_knw=inputs["attention_mask_knw"],
+                **gen_kwargs,
+            )
+        else:
+            generated_tokens = self.model.generate(
+                inputs["input_ids"],
+                attention_mask=inputs["attention_mask"],
+                **gen_kwargs,
+            )
         # in case the batch is shorter than max length, the output should be padded
         if generated_tokens.shape[-1] < gen_kwargs["max_length"]:
             generated_tokens = self._pad_tensors_to_max_len(generated_tokens, gen_kwargs["max_length"])
@@ -178,6 +197,8 @@ class Seq2SeqTrainer(Trainer):
                 with autocast():
                     outputs = model(**inputs)
             else:
+                # TODO: What is happening here?
+                # Split inputs again!!
                 outputs = model(**inputs)
             if has_labels:
                 if self.label_smoother is not None:
