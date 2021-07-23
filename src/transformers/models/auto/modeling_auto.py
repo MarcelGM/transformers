@@ -611,6 +611,7 @@ MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING = OrderedDict(
         (MBartConfig, MBartForConditionalGeneration),
         (BlenderbotConfig, BlenderbotForConditionalGeneration),
         (BartConfig, BartForConditionalGeneration),
+        ##(BartExtendedConfig, BartExtendedForConditionalGeneration),
         (FSMTConfig, FSMTForConditionalGeneration),
         (EncoderDecoderConfig, EncoderDecoderModel),
         (XLMProphetNetConfig, XLMProphetNetForConditionalGeneration),

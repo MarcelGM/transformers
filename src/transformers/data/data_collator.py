@@ -270,6 +270,13 @@ class DataCollatorForSeq2Seq:
     label_pad_token_id: int = -100
 
     def __call__(self, features):
+
+        # if self.model.config.is_double:
+        #     MAX_TARGET_LENGTH = 128
+        #     labels = [feature["labels"][:MAX_TARGET_LENGTH] for feature in features] if "labels" in features[0].keys() else None
+        #     filter_labels = [feature["labels"][MAX_TARGET_LENGTH:] for feature in features] if "labels" in features[0].keys() else None
+        #
+        # else:
         labels = [feature["labels"] for feature in features] if "labels" in features[0].keys() else None
         # We have to pad the labels before calling `tokenizer.pad` as this method won't pad them and needs them of the
         # same length to return tensors.
@@ -281,6 +288,16 @@ class DataCollatorForSeq2Seq:
                 feature["labels"] = (
                     feature["labels"] + remainder if padding_side == "right" else remainder + feature["labels"]
                 )
+        # if self.model.config.is_double and filter_labels is not None:
+        #     # We have to pad the filter_labels before calling `tokenizer.pad` as this method won't pad them and needs them of the
+        #     # same length to return tensors.
+        #     max_label_length = max(len(l) for l in filter_labels)
+        #     padding_side = self.tokenizer.padding_side
+        #     for feature in features:
+        #         remainder = [self.label_pad_token_id] * (max_label_length - len(feature["filter_labels"]))
+        #         feature["labels"] = ( feature["labels"] +
+        #             feature["labels"] + remainder if padding_side == "right" else remainder + feature["filter_labels"]
+        #         )
 
         features = self.tokenizer.pad(
             features,
@@ -291,9 +308,19 @@ class DataCollatorForSeq2Seq:
         )
 
         # prepare decoder_input_ids
-        if self.model is not None and hasattr(self.model, "prepare_decoder_input_ids_from_labels"):
-            decoder_input_ids = self.model.prepare_decoder_input_ids_from_labels(labels=features["labels"])
-            features["decoder_input_ids"] = decoder_input_ids
+        if not self.model.config.is_double:
+            if self.model is not None and hasattr(self.model, "prepare_decoder_input_ids_from_labels"):
+                decoder_input_ids = self.model.prepare_decoder_input_ids_from_labels(labels=features["labels"])
+                features["decoder_input_ids"] = decoder_input_ids
+        else:
+            if self.model is not None and hasattr(self.model, "prepare_decoder_input_ids_from_labels"):
+                MAX_TARGET_LENGTH = 128
+                labels = features["labels"][:,:MAX_TARGET_LENGTH]
+                filter_labels = features["labels"][:,MAX_TARGET_LENGTH:]
+                decoder_summary_input_ids = self.model.prepare_decoder_input_ids_from_labels(labels=labels)
+                decoder_filter_input_ids = self.model.prepare_decoder_input_ids_from_labels(labels=filter_labels)
+                features["decoder_summary_input_ids"] = decoder_summary_input_ids
+                features["decoder_filter_input_ids"] = decoder_filter_input_ids
 
         return features
 

@@ -92,6 +92,8 @@ class BartConfig(PretrainedConfig):
             :obj:`eos_token_id`.
         extended (:obj:`bool`, `optional`, defaults to :obj:`False`):
             Whether to use BartModel or BartExtendedModel.
+        double (:obj:`bool`, `optional`, defaults to :obj:`False`):
+            Whether to use BartModel or BartDoubleModel.
 
     Example::
 
@@ -137,6 +139,8 @@ class BartConfig(PretrainedConfig):
         eos_token_id=2,
         is_encoder_decoder=True,
         is_extended=False,
+        is_double=False,
+        alpha=0.7,
         decoder_start_token_id=2,
         forced_eos_token_id=2,
         **kwargs
@@ -174,6 +178,8 @@ class BartConfig(PretrainedConfig):
         self.gradient_checkpointing = gradient_checkpointing
         self.scale_embedding = scale_embedding  # scale factor will be sqrt(d_model) if True
         self.is_extended = is_extended
+        self.is_double = is_double
+        self.alpha = alpha
 
         # ensure backward compatibility for BART CNN models
         if self.forced_bos_token_id is None and kwargs.get("force_bos_token_to_be_generated", False):

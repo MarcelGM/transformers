@@ -17,7 +17,7 @@
 Fine-tuning the library models for sequence to sequence.
 """
 # You can also adapt this script on your own sequence to sequence task. Pointers for this are left as comments.
-
+import json
 import logging
 import os
 import sys
@@ -35,6 +35,7 @@ from transformers import (
     AutoModelForSeq2SeqLM,
     AutoTokenizer,
     BartExtendedForConditionalGeneration,
+    BartDoubleForConditionalGeneration,
     BartForConditionalGeneration,
     DataCollatorForSeq2Seq,
     HfArgumentParser,
@@ -251,6 +252,7 @@ def main():
         # If we pass only one argument to the script and it's the path to a json file,
         # let's parse it to get our arguments.
         model_args, data_args, training_args = parser.parse_json_file(json_file=os.path.abspath(sys.argv[1]))
+        extra_args = json.load(open(sys.argv[1], 'r'))
     else:
         model_args, data_args, training_args = parser.parse_args_into_dataclasses()
 
@@ -341,6 +343,12 @@ def main():
         revision=model_args.model_revision,
         use_auth_token=True if model_args.use_auth_token else None,
     )
+
+    # Setting args in json file
+    config.is_extended = extra_args['is_extended']
+    config.is_double = extra_args['is_double']
+    config.alpha = extra_args['alpha']
+
     tokenizer = AutoTokenizer.from_pretrained(
         model_args.tokenizer_name if model_args.tokenizer_name else model_args.model_name_or_path,
         cache_dir=model_args.cache_dir,
@@ -357,16 +365,16 @@ def main():
         use_auth_token=True if model_args.use_auth_token else None,
     )
 
-    pretrained_bart = BartForConditionalGeneration.from_pretrained(model_args.model_name_or_path) # bart-base or bart-large-cnn
-
-    # set use_cache to False
-    pretrained_bart.config.use_cache = False
-
-    from copy import deepcopy
-    extended_config = deepcopy(pretrained_bart.config)
-    extended_config.is_extended = True
-    model = BartExtendedForConditionalGeneration(extended_config) #pretrained_bart.config
-    del pretrained_bart
+    # pretrained_bart = BartForConditionalGeneration.from_pretrained(model_args.model_name_or_path) # bart-base or bart-large-cnn
+    #
+    # # set use_cache to False
+    # pretrained_bart.config.use_cache = False
+    #
+    # from copy import deepcopy
+    # extended_config = deepcopy(pretrained_bart.config)
+    # extended_config.is_extended = True
+    # model = BartExtendedForConditionalGeneration(extended_config) #pretrained_bart.config
+    # del pretrained_bart
 
     special_tokens = ['<info>', '<triple>']
 
@@ -416,11 +424,11 @@ def main():
     max_target_length = data_args.max_target_length
     padding = "max_length" if data_args.pad_to_max_length else False
 
-    # TODO: Choose columns
-    # And padding True
-    text_column = 'text_alone'
-    knw_column = 'knowledge'
-    summary_column = 'summary'
+
+    if config.is_extended:
+        knw_column = extra_args['knw_column']
+    if config.is_double:
+        filter_column = extra_args['filter_column']
 
     padding = 'max_length'
 
@@ -430,19 +438,20 @@ def main():
             f"`{model.__class__.__name__}`. This will lead to loss being calculated twice and will take up more memory"
         )
 
-    # TODO: Add knw_inputs here
+
     def preprocess_function(examples):
         inputs = examples[text_column]
-        knowledge_inputs = examples[knw_column]
         targets = examples[summary_column]
         inputs = [prefix + inp for inp in inputs]
         model_inputs = tokenizer(inputs, max_length=data_args.max_source_length, padding=padding, truncation=True)
 
 
-        IS_EXTENDED = True
-        if IS_EXTENDED:
-            model_knowledge_inputs = tokenizer(knowledge_inputs, max_length=max_target_length, padding=padding, truncation=True)
-
+        if config.is_extended:
+            knowledge_inputs = examples[knw_column]
+            model_knowledge_inputs = tokenizer(knowledge_inputs, max_length=data_args.max_source_length, padding=padding, truncation=True)
+            #model_inputs['knw_ids'] = model_knowledge_inputs['input_ids']
+            #model_inputs['knw_attention_mask'] = model_knowledge_inputs['attention_mask']
+            # Creating a double field
             for field in ['input_ids', 'attention_mask']:
                 model_inputs[field] = [art + knw for art, knw in zip(model_inputs[field], model_knowledge_inputs[field])]
 
@@ -458,11 +467,25 @@ def main():
             ]
         model_inputs["labels"] = labels["input_ids"]
 
-        # model_inputs["knw_ids"] = model_knowledge_inputs['input_ids']
-        # model_inputs["attention_mask_knw"] = model_knowledge_inputs["attention_mask"]
+        if config.is_double:
+            # Setup the tokenizer for filtering targets
+            filter_targets = examples[filter_column]
+            with tokenizer.as_target_tokenizer():
+                filter_labels = tokenizer(filter_targets, max_length=max_target_length, padding=padding, truncation=True)
 
-       #model_knowledge_inputs["labels"] = labels["input_ids"]
-        return model_inputs#, model_knowledge_inputs
+            # If we are padding here, replace all tokenizer.pad_token_id in the labels by -100 when we want to ignore
+            # padding in the loss.
+            if padding == "max_length" and data_args.ignore_pad_token_for_loss:
+                filter_labels["input_ids"] = [
+                    [(l if l != tokenizer.pad_token_id else -100) for l in label] for label in filter_labels["input_ids"]
+                ]
+            #model_inputs["filter_labels"] = filter_labels["input_ids"]
+
+
+            # Creating a double field
+            model_inputs['labels'] = [art + knw for art, knw in zip(model_inputs['labels'], filter_labels["input_ids"])]
+
+        return model_inputs
 
     if training_args.do_train:
         if "train" not in datasets:
@@ -551,6 +574,7 @@ def main():
         result["gen_len"] = np.mean(prediction_lens)
         result = {k: round(v, 4) for k, v in result.items()}
         return result
+
 
     # Initialize our Trainer
     trainer = Seq2SeqTrainer(

@@ -507,6 +507,10 @@ class Trainer:
             self._signature_columns = list(signature.parameters.keys())
             # Labels may be named label or label_ids, the default data collator handles that.
             self._signature_columns += ["label", "label_ids"]
+        if self.model.config.is_extended:
+            self._signature_columns += ['knw_ids', 'knw_attention_mask']
+        if self.model.config.is_double:
+            self._signature_columns += ['filter_labels']
         columns = [k for k in self._signature_columns if k in dataset.column_names]
         ignored_columns = list(set(dataset.column_names) - set(self._signature_columns))
         if len(ignored_columns) > 0:
@@ -1234,6 +1238,7 @@ class Trainer:
             )
             self.control = self.callback_handler.on_epoch_begin(args, self.state, self.control)
 
+            # TODO: Where is decoder_inputs defined?
             for step, inputs in enumerate(epoch_iterator):
 
                 # Skip past any already trained steps if resuming training
@@ -1784,11 +1789,17 @@ class Trainer:
             labels = None
 
         # TODO: Check what is inputs
-        MAX_SOURCE_LENGTH = 1024
-        inputs["knw_ids"] = inputs["input_ids"][:,MAX_SOURCE_LENGTH:]
-        inputs["input_ids"] = inputs["input_ids"][:,:MAX_SOURCE_LENGTH]
-        inputs["attention_mask_knw"] = inputs["attention_mask"][:,MAX_SOURCE_LENGTH:]
-        inputs["attention_mask"] = inputs["attention_mask"][:,:MAX_SOURCE_LENGTH]
+        if model.module.config.is_extended:
+            MAX_SOURCE_LENGTH = 1024
+            inputs["knw_ids"] = inputs["input_ids"][:,MAX_SOURCE_LENGTH:]
+            inputs["input_ids"] = inputs["input_ids"][:,:MAX_SOURCE_LENGTH]
+            inputs["attention_mask_knw"] = inputs["attention_mask"][:,MAX_SOURCE_LENGTH:]
+            inputs["attention_mask"] = inputs["attention_mask"][:,:MAX_SOURCE_LENGTH]
+
+        # if model.module.config.is_double:
+        #     MAX_TARGET_LENGTH = 128
+        #     inputs["filter_labels"] = inputs["labels"][:,MAX_TARGET_LENGTH:]
+        #     inputs["labels"] = inputs["labels"][:,:MAX_TARGET_LENGTH]
 
         outputs = model(**inputs)
         # Save past state if it exists
@@ -1796,6 +1807,7 @@ class Trainer:
         if self.args.past_index >= 0:
             self._past = outputs[self.args.past_index]
 
+        # TODO: Add filter labels
         if labels is not None:
             loss = self.label_smoother(outputs, labels)
         else:

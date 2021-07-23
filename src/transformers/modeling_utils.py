@@ -523,15 +523,22 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         If the :obj:`torchscript` flag is set in the configuration, can't handle parameter sharing so we are cloning
         the weights instead.
         """
-        output_embeddings = self.get_output_embeddings()
-        if output_embeddings is not None and self.config.tie_word_embeddings:
-            self._tie_or_clone_weights(output_embeddings, self.get_input_embeddings())
+        if self.config.is_double:
+            output_summary_embeddings = self.get_output_summary_embeddings()
+            output_filter_embeddings = self.get_output_filter_embeddings()
+            self._tie_or_clone_weights(output_summary_embeddings, self.get_input_embeddings())
+            self._tie_or_clone_weights(output_filter_embeddings, self.get_input_embeddings())
 
-        # TODO: Edit here
-        if self.config.is_encoder_decoder and self.config.tie_encoder_decoder:
-            if hasattr(self, self.base_model_prefix):
-                self = getattr(self, self.base_model_prefix)
-            self._tie_encoder_decoder_weights(self.encoder, self.decoder, self.base_model_prefix)
+        else:
+            output_embeddings = self.get_output_embeddings()
+            if output_embeddings is not None and self.config.tie_word_embeddings:
+                self._tie_or_clone_weights(output_embeddings, self.get_input_embeddings())
+
+            # TODO: Edit here
+            if self.config.is_encoder_decoder and self.config.tie_encoder_decoder:
+                if hasattr(self, self.base_model_prefix):
+                    self = getattr(self, self.base_model_prefix)
+                self._tie_encoder_decoder_weights(self.encoder, self.decoder, self.base_model_prefix)
 
     @staticmethod
     def _tie_encoder_decoder_weights(encoder: nn.Module, decoder: nn.Module, base_model_prefix: str):
@@ -1210,6 +1217,17 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                         f"at '{resolved_archive_file}'"
                         "If you tried to load a PyTorch model from a TF 2.0 checkpoint, please set from_tf=True. "
                     )
+
+            #if config.is_double: following if to elif
+            if 'is_double' in config.to_dict().keys():
+                if config.is_double and str(type(model)) == "<class 'transformers.models.bart.modeling_bart.BartForConditionalGeneration'>":
+                    from transformers import BartDoubleForConditionalGeneration
+                    model = BartDoubleForConditionalGeneration(config)
+
+            elif 'is_extended' in config.to_dict().keys():
+                if config.is_extended and str(type(model)) == "<class 'transformers.models.bart.modeling_bart.BartForConditionalGeneration'>":
+                    from transformers import BartExtendedForConditionalGeneration
+                    model = BartExtendedForConditionalGeneration(config)
 
             model, missing_keys, unexpected_keys, error_msgs = cls._load_state_dict_into_model(
                 model, state_dict, pretrained_model_name_or_path, _fast_init=_fast_init
