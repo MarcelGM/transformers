@@ -1217,6 +1217,14 @@ class Trainer:
                 for _ in train_dataloader:
                     break
 
+        # Change alpha values
+        if model.module.config.alpha == "variable":
+            var_alpha = True
+            print("\n\nVARIABLE ALPHA\n\n")
+        else:
+            var_alpha = False
+            print("\n\nCONSTANT ALPHA\n\n")
+
         for epoch in range(epochs_trained, num_train_epochs):
             if isinstance(train_dataloader, DataLoader) and isinstance(train_dataloader.sampler, DistributedSampler):
                 train_dataloader.sampler.set_epoch(epoch)
@@ -1238,7 +1246,14 @@ class Trainer:
             )
             self.control = self.callback_handler.on_epoch_begin(args, self.state, self.control)
 
-            # TODO: Where is decoder_inputs defined?
+            # Change alpha value
+            if var_alpha:
+                model.module.config.alpha = [0, 0.2, 0.4, 0.6, 0.8, 0.9, 1, 1, 1, 1][epoch]
+            print("var_alpha:", var_alpha)
+            print("epoch:", epoch)
+            print("model.module.config.alpha:", model.module.config.alpha)
+            print("\n\n\n")
+
             for step, inputs in enumerate(epoch_iterator):
 
                 # Skip past any already trained steps if resuming training

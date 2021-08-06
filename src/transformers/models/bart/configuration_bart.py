@@ -140,6 +140,7 @@ class BartConfig(PretrainedConfig):
         is_encoder_decoder=True,
         is_extended=False,
         is_double=False,
+        freeze_bart=False,
         alpha=0.7,
         decoder_start_token_id=2,
         forced_eos_token_id=2,
@@ -179,6 +180,7 @@ class BartConfig(PretrainedConfig):
         self.scale_embedding = scale_embedding  # scale factor will be sqrt(d_model) if True
         self.is_extended = is_extended
         self.is_double = is_double
+        self.freeze_bart = freeze_bart
         self.alpha = alpha
 
         # ensure backward compatibility for BART CNN models

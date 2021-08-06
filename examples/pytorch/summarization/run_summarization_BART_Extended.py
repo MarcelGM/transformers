@@ -344,9 +344,16 @@ def main():
         use_auth_token=True if model_args.use_auth_token else None,
     )
 
+    def return_boolean(string):
+        if string.lower() == "false":
+            return False
+        else:
+            return True
+
     # Setting args in json file
-    config.is_extended = extra_args['is_extended']
-    config.is_double = extra_args['is_double']
+    config.is_extended = return_boolean(extra_args['is_extended'])
+    config.is_double = return_boolean(extra_args['is_double'])
+    config.freeze_bart = return_boolean(extra_args['freeze_bart'])
     config.alpha = extra_args['alpha']
 
     tokenizer = AutoTokenizer.from_pretrained(
@@ -437,6 +444,18 @@ def main():
             "label_smoothing is enabled but the `prepare_decoder_input_ids_from_labels` method is not defined for"
             f"`{model.__class__.__name__}`. This will lead to loss being calculated twice and will take up more memory"
         )
+
+    print("\nFreezing BART:", model.config.freeze_bart)
+    if model.config.freeze_bart:
+        for module in [model.model.encoder_source, model.model.decoder_summary]:
+            for param in module.parameters():
+                param.requires_grad = False
+        print('\n\nBART FROZEN\n\n')
+    else:
+        for module in [model.model.encoder_source, model.model.decoder_summary]:
+            for param in module.parameters():
+                param.requires_grad = True
+        print('\n\nBART NOT FROZEN\n\n')
 
 
     def preprocess_function(examples):

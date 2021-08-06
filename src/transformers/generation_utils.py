@@ -1861,6 +1861,8 @@ class GenerationMixin:
             # Edited to use only summary decoder logits
             if self.config.is_double:
                 next_token_logits = outputs.summary_logits[:, -1, :]
+                if self.config.alpha == 0:
+                    next_token_logits = outputs.filter_logits[:, -1, :]
             else:
                 next_token_logits = outputs.logits[:, -1, :]
 
